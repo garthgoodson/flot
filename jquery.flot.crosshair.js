@@ -63,13 +63,23 @@ The plugin also adds four public methods:
         crosshair: {
             mode: null, // one of null, "x", "y" or "xy",
             color: "rgba(170, 0, 0, 0.80)",
-            lineWidth: 1
+            lineWidth: 1,
+	    tip: false,
+            dateFormat: true,
+	    tipFormat: "%a, %d %b %Y %H:%M UTC",
+	    tipPosRelative: false,
+	    shift: {left: 10, top: 10}
         }
     };
-    
+
     function init(plot) {
         // position of crosshair in pixels
-        var crosshair = { x: -1, y: -1, locked: false };
+        var crosshair = { x: -1, y: -1, locked: false, item: null,
+			  crossTip: null, toolTip: null };
+
+        if (plot.getOptions().crosshair === false) {
+            return;
+        }
 
         plot.setCrosshair = function setCrosshair(pos) {
             if (!pos)
@@ -79,12 +89,12 @@ The plugin also adds four public methods:
                 crosshair.x = Math.max(0, Math.min(o.left, plot.width()));
                 crosshair.y = Math.max(0, Math.min(o.top, plot.height()));
             }
-            
+
             plot.triggerRedrawOverlay();
         };
-        
+
         plot.clearCrosshair = plot.setCrosshair; // passes null for pos
-        
+
         plot.lockCrosshair = function lockCrosshair(pos) {
             if (pos)
                 plot.setCrosshair(pos);
@@ -95,37 +105,48 @@ The plugin also adds four public methods:
             crosshair.locked = false;
         };
 
-        function onMouseOut(e) {
-            if (crosshair.locked)
+        function updateCrosshair(e)
+        {
+            if (plot.getSelection &&
+                plot.isSelectionActive()) {
+                if (crosshair.x != -1) {
+                    crosshair.x = -1; // hide the crosshair while selecting
+                    plot.triggerRedrawOverlay();
+                }
                 return;
-
-            if (crosshair.x != -1) {
-                crosshair.x = -1;
-                plot.triggerRedrawOverlay();
             }
+
+            var offset = plot.getPlotOffset();
+            var plOffset = plot.getPlaceholder().offset();
+            var left = e.pageX - Math.floor(offset.left + plOffset.left);
+            var top = e.pageY - (offset.top + plOffset.top);
+
+            if (left < 0 || left > plot.width() ||
+                top < 0 || top > plot.height()) {
+                crosshair.x = -1; // hide the crosshair while selecting
+                plot.triggerRedrawOverlay();
+                return;
+            }
+
+            crosshair.x = Math.max(0, Math.min(left, plot.width()));
+            crosshair.y = Math.max(0, Math.min(top, plot.height()));
+
+            plot.triggerRedrawOverlay();
         }
 
         function onMouseMove(e) {
-            if (crosshair.locked)
-                return;
-                
-            if (plot.getSelection && plot.getSelection()) {
-                crosshair.x = -1; // hide the crosshair while selecting
+            if (crosshair.locked) {
                 return;
             }
-                
-            var offset = plot.offset();
-            crosshair.x = Math.max(0, Math.min(e.pageX - offset.left, plot.width()));
-            crosshair.y = Math.max(0, Math.min(e.pageY - offset.top, plot.height()));
-            plot.triggerRedrawOverlay();
+
+            updateCrosshair(e);
         }
-        
+
         plot.hooks.bindEvents.push(function (plot, eventHolder) {
             if (!plot.getOptions().crosshair.mode)
                 return;
 
-            eventHolder.mouseout(onMouseOut);
-            eventHolder.mousemove(onMouseMove);
+            plot.getPlaceholder().mousemove(onMouseMove);
         });
 
         plot.hooks.drawOverlay.push(function (plot, ctx) {
@@ -134,7 +155,7 @@ The plugin also adds four public methods:
                 return;
 
             var plotOffset = plot.getPlotOffset();
-            
+
             ctx.save();
             ctx.translate(plotOffset.left, plotOffset.top);
 
@@ -157,16 +178,133 @@ The plugin also adds four public methods:
                     ctx.lineTo(plot.width(), drawY);
                 }
                 ctx.stroke();
+
+		if (c.tip) {
+		    var crossTip = getCrossTip(plot);
+		    var left = plotOffset.left + Math.round(crosshair.x) + c.shift.left;
+		    var top = plotOffset.top + Math.round(crosshair.y) + c.shift.top;
+                    var leftFlip = false;
+
+                    if (c.dateFormat) {
+		        var coordX = Math.round(plot.c2p({left: crosshair.x}).x);
+		        var str = $.plot.formatDate(new Date(coordX), c.tipFormat);
+		        crossTip.crossTip.text(str);
+                    } else {
+                        var str = plot.c2p({left: crosshair.x}).x;
+                        crossTip.crossTip.text(str);
+                    }
+
+		    if (c.tipPosRelative) {
+                        var tipWidth = crossTip.crossTip.outerWidth(true);
+                        var cTipLeft = left;
+
+                        if ((tipWidth + left) > (plot.width() + plotOffset.left)) {
+                            cTipLeft = left - tipWidth - (c.shift.left * 2);
+                            leftFlip = true;
+                        }
+
+			crossTip.crossTip.css('left', cTipLeft);
+		    }
+		    crossTip.crossTip.show();
+
+                    if (crosshair.item != null) {
+                        var tipWidth = crossTip.toolTip.outerWidth(true);
+                        var cTipLeft = left;
+
+                        if (leftFlip == true ||
+                            ((tipWidth + left) > (plot.width() + plotOffset.left))) {
+                            cTipLeft = left - tipWidth - (c.shift.left * 2);
+                        }
+
+                        cTipTop = Math.max((parseInt(crossTip.crossTip.css('top')) +
+                                            crossTip.crossTip.outerHeight(true) + 5),
+                                           top);
+
+		        crossTip.toolTip.css('left', cTipLeft);
+		        crossTip.toolTip.css('top', cTipTop);
+                        crossTip.toolTip.text(crosshair.item.series.label + ": " +
+                                              crosshair.item.series.data[crosshair.
+                                                                         item.dataIndex][1]);
+		        crossTip.toolTip.show();
+                    } else {
+		        crossTip.toolTip.hide();
+                    }
+		}
+            } else {
+		var crossTip = getCrossTip(plot);
+		crossTip.crossTip.hide();
+		crossTip.toolTip.hide();
             }
+
             ctx.restore();
         });
 
+	function getCrossTip(plot)
+	{
+	    if (crosshair.crossTip != null &&
+		crosshair.crossTip.length > 0) {
+		return {crossTip: crosshair.crossTip,
+			toolTip: crosshair.toolTip};
+	    }
+
+	    var placeholder = plot.getPlaceholder();
+	    var offset = plot.getPlotOffset();
+            var plOffset = placeholder.offset();
+
+	    crosshair.crossTip = $('<div/>', {
+		'class': 'crossTip',
+		'style': 'display:none;position:absolute;top:'+
+		    (offset.top+5) +
+		    'px;left:'+(offset.left+5) +
+		    'px;white-space:nowrap'
+	    }).appendTo(placeholder);
+
+	    crosshair.toolTip = $('<div/>', {
+		'class': 'crossTipTool',
+		'style': 'display:none;position:absolute;white-space:nowrap'
+	    }).appendTo(placeholder);
+
+	    return {crossTip: crosshair.crossTip,
+		    toolTip: crosshair.toolTip};
+	}
+
+        // Try and shutdown cleanly
         plot.hooks.shutdown.push(function (plot, eventHolder) {
-            eventHolder.unbind("mouseout", onMouseOut);
             eventHolder.unbind("mousemove", onMouseMove);
+            plot.getPlaceholder().unbind("plothover", plotHover);
+            var crossTip = getCrossTip(plot);
+            crossTip.crossTip.remove();
+            crossTip.toolTip.remove();
         });
+
+	plot.getPlaceholder().bind( "plothover", plotHover);
+
+        function plotHover( evt, pos, item ) {
+
+	    if (item) {
+                // Identify movements within locked crosshair and ignore
+		if (crosshair.item != null && crosshair.item.pageX == item.pageX &&
+		    crosshair.item.pageY == item.pageY) {
+		    return;
+		}
+
+                // New locked item, update crosshair
+		crosshair.item = item;
+                crosshair.locked = true;
+                updateCrosshair({pageX: item.pageX, pageY: item.pageY});
+
+	    } else if (crosshair.locked) {
+		// Return normal crosshair operation
+		if (crosshair.item != null) {
+		    var crossTip = getCrossTip(plot);
+		    crossTip.toolTip.hide();
+		}
+		crosshair.item = null;
+                crosshair.locked = false;
+	    }
+	}
     }
-    
+
     $.plot.plugins.push({
         init: init,
         options: options,

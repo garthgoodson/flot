@@ -644,6 +644,14 @@ More detail and specific examples can be found in the included HTML file.
 			var canvasY =  parseInt(e.pageY - offset.top);
 			var item = findNearbySlice(canvasX, canvasY);
 
+                        highlightItem(item, 'plothover');
+			// trigger any hover bind events
+
+			var pos = { pageX: e.pageX, pageY: e.pageY };
+			target.trigger(eventname, [pos, item]);
+		}
+
+                function highlightItem(item, eventname) {
 			if (options.grid.autoHighlight) {
 
 				// clear auto-highlights
@@ -661,12 +669,30 @@ More detail and specific examples can be found in the included HTML file.
 			if (item) {
 				highlight(item.series, eventname);
 			}
+                }
 
-			// trigger any hover bind events
+                function highlightSeries(label) {
+		       var slices = plot.getData();
+                       var item = null;
 
-			var pos = { pageX: e.pageX, pageY: e.pageY };
-			target.trigger(eventname, [pos, item]);
-		}
+			for (var i = 0; i < slices.length; ++i) {
+				var s = slices[i];
+				if (s.pie.show) {
+                                    if (s.label == label) {
+				        item = {
+					    datapoint: [s.percent, s.data],
+					    dataIndex: 0,
+					    series: s,
+					    seriesIndex: i
+				        };
+                                    }
+                                }
+                        }
+                        if (item != null) {
+                            highlightItem(item, 'plothover');
+                        }
+                }
+                plot.highlightSeriesPie = highlightSeries;
 
 		function highlight(s, auto) {
 			//if (typeof s == "number") {

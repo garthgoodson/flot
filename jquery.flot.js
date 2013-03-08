@@ -174,6 +174,7 @@ Licensed under the MIT license.
         plot.setData = setData;
         plot.setupGrid = setupGrid;
         plot.draw = draw;
+        plot.drawSeries = drawSeries;
         plot.getPlaceholder = function() { return placeholder; };
         plot.getCanvas = function() { return canvas; };
         plot.getPlotOffset = function() { return plotOffset; };
@@ -202,6 +203,7 @@ Licensed under the MIT license.
         plot.highlight = highlight;
         plot.unhighlight = unhighlight;
         plot.triggerRedrawOverlay = triggerRedrawOverlay;
+        plot.drawOverlay = drawOverlay;
         plot.pointOffset = function(point) {
             return {
                 left: parseInt(xaxes[axisNumber(point, "x") - 1].p2c(+point.x) + plotOffset.left, 10),
@@ -423,7 +425,6 @@ Licensed under the MIT license.
         }
 
         function fillInSeriesOptions() {
-
             var neededColors = series.length, maxIndex = -1, i;
 
             // Subtract the number of series that already have fixed colors or
@@ -920,6 +921,10 @@ Licensed under the MIT license.
             eventHolder.unbind("click", onClick);
 
             executeHooks(hooks.shutdown, [eventHolder]);
+
+            for (var i in hooks) {
+                hooks[i] = [];
+            }
         }
 
         function setTransformationHelpers(axis) {
@@ -1004,7 +1009,7 @@ Licensed under the MIT license.
             }
             ctx.restore();
 
-            axis.labelWidth = Math.ceil(axisw);
+            axis.labelWidth = Math.ceil(axisw)+2;
             axis.labelHeight = Math.ceil(axish);
         }
 
@@ -1446,7 +1451,7 @@ Licensed under the MIT license.
 
             for (var i = 0; i < series.length; ++i) {
                 executeHooks(hooks.drawSeries, [ctx, series[i]]);
-                drawSeries(series[i]);
+                drawSeries(series[i], ctx);
             }
 
             executeHooks(hooks.draw, [ctx]);
@@ -1796,16 +1801,16 @@ Licensed under the MIT license.
             ctx.restore();
         }
 
-        function drawSeries(series) {
+        function drawSeries(series, ctx) {
             if (series.lines.show)
-                drawSeriesLines(series);
+                drawSeriesLines(series, ctx);
             if (series.bars.show)
-                drawSeriesBars(series);
+                drawSeriesBars(series, ctx);
             if (series.points.show)
-                drawSeriesPoints(series);
+                drawSeriesPoints(series, ctx);
         }
 
-        function drawSeriesLines(series) {
+        function drawSeriesLines(series, ctx) {
             function plotLine(datapoints, xoffset, yoffset, axisx, axisy) {
                 var points = datapoints.points,
                     ps = datapoints.pointsize,
@@ -2059,7 +2064,7 @@ Licensed under the MIT license.
             ctx.restore();
         }
 
-        function drawSeriesPoints(series) {
+        function drawSeriesPoints(series, ctx) {
             function plotPoints(datapoints, radius, fillStyle, offset, shadow, axisx, axisy, symbol) {
                 var points = datapoints.points, ps = datapoints.pointsize;
 
@@ -2232,7 +2237,7 @@ Licensed under the MIT license.
             }
         }
 
-        function drawSeriesBars(series) {
+        function drawSeriesBars(series, ctx) {
             function plotBars(datapoints, barLeft, barRight, offset, fillStyleCallback, axisx, axisy) {
                 var points = datapoints.points, ps = datapoints.pointsize;
 
@@ -2280,7 +2285,7 @@ Licensed under the MIT license.
                 return getColorOrGradient(filloptions.fillColor, bottom, top, seriesColor);
 
             var c = $.color.parse(seriesColor);
-            c.a = typeof fill == "number" ? fill : 0.4;
+            c.a = typeof fill == "number" ? fill : 0.6;
             c.normalize();
             return c.toString();
         }
@@ -2352,7 +2357,7 @@ Licensed under the MIT license.
             if (fragments.length == 0)
                 return;
 
-            var table = '<table style="font-size:smaller;color:' + options.grid.color + '">' + fragments.join("") + '</table>';
+            var table = '<table style="color:' + options.grid.color + '">' + fragments.join("") + '</table>';
             if (options.legend.container != null)
                 $(options.legend.container).html(table);
             else {
@@ -2403,8 +2408,9 @@ Licensed under the MIT license.
                 item = null, foundPoint = false, i, j, ps;
 
             for (i = series.length - 1; i >= 0; --i) {
-                if (!seriesFilter(series[i]))
+                if (!seriesFilter(series[i])) {
                     continue;
+		}
 
                 var s = series[i],
                     axisx = s.xaxis,
@@ -2426,14 +2432,16 @@ Licensed under the MIT license.
                 if (s.lines.show || s.points.show) {
                     for (j = 0; j < points.length; j += ps) {
                         var x = points[j], y = points[j + 1];
-                        if (x == null)
+                        if (x == null) {
                             continue;
+			}
 
                         // For points and lines, the cursor must be within a
                         // certain distance to the data point
                         if (x - mx > maxx || x - mx < -maxx ||
-                            y - my > maxy || y - my < -maxy)
+                            y - my > maxy || y - my < -maxy) {
                             continue;
+			}
 
                         // We have to calculate distances in pixels, not in
                         // data units, because the scales of the axes may be different
@@ -2494,6 +2502,7 @@ Licensed under the MIT license.
             if (options.grid.hoverable)
                 triggerClickHoverEvent("plothover", e,
                                        function (s) { return false; });
+				       //function (s) { return s["hoverable"] != false; });
         }
 
         function onClick(e) {
@@ -2623,7 +2632,7 @@ Licensed under the MIT license.
         function drawPointHighlight(series, point) {
             var x = point[0], y = point[1],
                 axisx = series.xaxis, axisy = series.yaxis,
-                highlightColor = (typeof series.highlightColor === "string") ? series.highlightColor : $.color.parse(series.color).scale('a', 0.5).toString();
+                highlightColor = (typeof series.highlightColor === "string") ? series.highlightColor : $.color.parse(series.color).scale('a', 0.6).toString();
 
             if (x < axisx.min || x > axisx.max || y < axisy.min || y > axisy.max)
                 return;
@@ -2645,7 +2654,7 @@ Licensed under the MIT license.
         }
 
         function drawBarHighlight(series, point) {
-            var highlightColor = (typeof series.highlightColor === "string") ? series.highlightColor : $.color.parse(series.color).scale('a', 0.5).toString(),
+            var highlightColor = (typeof series.highlightColor === "string") ? series.highlightColor : $.color.parse(series.color).scale('a', 0.6).toString(),
                 fillStyle = highlightColor,
                 barLeft = series.bars.align == "left" ? 0 : -series.bars.barWidth/2;
 

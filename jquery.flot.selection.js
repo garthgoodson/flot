@@ -84,7 +84,7 @@ The plugin allso adds the following methods to the plot object:
         function onMouseMove(e) {
             if (selection.active) {
                 updateSelection(e);
-                
+
                 plot.getPlaceholder().trigger("plotselecting", [ getSelection() ]);
             }
         }
@@ -92,7 +92,7 @@ The plugin allso adds the following methods to the plot object:
         function onMouseDown(e) {
             if (e.which != 1)  // only accept left-click
                 return;
-            
+
             // cancel out any text selections
             document.body.focus();
 
@@ -107,19 +107,18 @@ The plugin allso adds the following methods to the plot object:
             }
 
             setSelectionPos(selection.first, e);
-
             selection.active = true;
 
             // this is a bit silly, but we have to use a closure to be
             // able to whack the same handler again
             mouseUpHandler = function (e) { onMouseUp(e); };
-            
+
             $(document).one("mouseup", mouseUpHandler);
         }
 
         function onMouseUp(e) {
             mouseUpHandler = null;
-            
+
             // revert drag stuff for old-school browsers
             if (document.onselectstart !== undefined)
                 document.onselectstart = savedhandlers.onselectstart;
@@ -154,6 +153,7 @@ The plugin allso adds the following methods to the plot object:
                     r[name] = { from: Math.min(p1, p2), to: Math.max(p1, p2) };
                 }
             });
+
             return r;
         }
 
@@ -279,9 +279,14 @@ The plugin allso adds the following methods to the plot object:
                 Math.abs(selection.second.y - selection.first.y) >= minSize;
         }
 
+        function isActive() {
+            return selection.active;
+        }
+
         plot.clearSelection = clearSelection;
         plot.setSelection = setSelection;
         plot.getSelection = getSelection;
+        plot.isSelectionActive = isActive;
 
         plot.hooks.bindEvents.push(function(plot, eventHolder) {
             var o = plot.getOptions();
@@ -300,7 +305,7 @@ The plugin allso adds the following methods to the plot object:
 
                 ctx.save();
                 ctx.translate(plotOffset.left, plotOffset.top);
-
+/*
                 var c = $.color.parse(o.selection.color);
 
                 ctx.strokeStyle = c.scale('a', 0.8).toString();
@@ -315,6 +320,21 @@ The plugin allso adds the following methods to the plot object:
 
                 ctx.fillRect(x, y, w, h);
                 ctx.strokeRect(x, y, w, h);
+*/
+
+                var x = Math.min(selection.first.x, selection.second.x) + 0.5,
+                    y = Math.min(selection.first.y, selection.second.y) + 0.5,
+                    w = Math.abs(selection.second.x - selection.first.x) - 1,
+                    h = Math.abs(selection.second.y - selection.first.y) - 1;
+
+		ctx.fillStyle = 'rgba(0,0,0,0.2)';
+		ctx.strokeStyle = '#999999';
+		ctx.lineWidth = 1.0;
+		ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+		ctx.fillRect(0,0,ctx.canvas.width, ctx.canvas.height);
+		ctx.clearRect(x, y, w, h);
+		// IE won't show transparent fill rect, so stroke a rect also.
+		ctx.strokeRect(x,y,w,h);
 
                 ctx.restore();
             }
